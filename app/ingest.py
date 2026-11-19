@@ -1,12 +1,21 @@
 """PDF ingestion: extract -> clean -> chunk -> embed -> store in Chroma, with a JSON registry of papers."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import math
+import re
 import threading
+import time
 from pathlib import Path
 
+from llama_index.core import Document
+from llama_index.core.node_parser import SentenceSplitter
+from pypdf import PdfReader
+
 from .config import get_settings
+from .providers import get_chroma_collection, get_index
 
 log = logging.getLogger(__name__)
 _registry_lock = threading.Lock()
@@ -39,9 +48,10 @@ def list_documents() -> list[dict]:
     reg = load_registry()
     return sorted(({"doc_id": k, **v} for k, v in reg.items()), key=lambda d: d["title"].lower())
 
-import math
-import re
-from pypdf import PdfReader
+
+# ---------------------------------------------------------------- extraction
+def file_hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:16]
 
 
 def clean_text(text: str) -> str:
@@ -129,17 +139,8 @@ def extract_pdf(path: Path) -> tuple[str, list[tuple[int, str]]]:
     title = guess_title(reader, pages[0][1], fallback=path.stem.replace("_", " "))
     return title, pages
 
-import hashlib
-import time
-from llama_index.core import Document
-from llama_index.core.node_parser import SentenceSplitter
-from .providers import get_index
 
-
-def file_hash(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()[:16]
-
-
+# ---------------------------------------------------------------- ingestion
 def ingest_pdf(path: Path, original_name: str | None = None) -> dict:
     """Ingest a single PDF. Idempotent: identical file content is skipped."""
     s = get_settings()
@@ -158,7 +159,9 @@ def ingest_pdf(path: Path, original_name: str | None = None) -> dict:
     for page_no, text in pages:
         doc = Document(
             text=text,
+            # NB: not "doc_id" -- LlamaIndex overwrites that key with its internal ref-doc UUID.
             metadata={"paper_id": doc_id, "file_name": name, "title": title, "page": page_no},
+            # Title helps the embedding place chunks in context; ids/page numbers are noise.
             excluded_embed_metadata_keys=["paper_id", "file_name", "page"],
             excluded_llm_metadata_keys=["paper_id"],
         )
@@ -184,3 +187,31 @@ def ingest_pdf(path: Path, original_name: str | None = None) -> dict:
         _save_registry(reg)
     log.info("Ingested %s (%d chunks) in %.1fs", name, len(nodes), time.perf_counter() - t0)
     return {"doc_id": doc_id, "status": "ingested", "seconds": round(time.perf_counter() - t0, 1), **entry}
+
+
+def ingest_folder(folder: Path, progress=None) -> list[dict]:
+    pdfs = sorted(p for p in folder.rglob("*") if p.suffix.lower() == ".pdf")
+    results = []
+    for i, p in enumerate(pdfs, start=1):
+        try:
+            results.append(ingest_pdf(p))
+        except Exception as e:  # noqa: BLE001
+            log.exception("Failed to ingest %s", p)
+            results.append({"file_name": p.name, "status": "error", "error": str(e)})
+        if progress:
+            progress(i, len(pdfs), results[-1])
+    return results
+
+
+def delete_document(doc_id: str) -> bool:
+    with _registry_lock:
+        reg = load_registry()
+        if doc_id not in reg:
+            return False
+        get_chroma_collection().delete(where={"paper_id": doc_id})
+        entry = reg.pop(doc_id)
+        _save_registry(reg)
+    stored = get_settings().papers_dir / entry["file_name"]
+    if stored.exists() and file_hash(stored.read_bytes()) == doc_id:
+        stored.unlink()
+    return True
