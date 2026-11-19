@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ResearchMind</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%233b5bdb'/><path d='M9 8h9a5 5 0 0 1 0 10h-9zM9 18v7M17 18l6 7' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<style>
+:root{
+  --bg:#f7f7f5;--panel:#fff;--ink:#1c1d1f;--muted:#6b6f76;--line:#e4e4e0;
+  --accent:#3b5bdb;--accent-soft:#e8edff;--ok:#2b8a3e;--err:#c92a2a;--warn:#e67700;
+  --code:#f1f1ee;--shadow:0 1px 2px rgba(0,0,0,.05),0 2px 8px rgba(0,0,0,.04);
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#141517;--panel:#1c1d20;--ink:#e8e8e6;--muted:#9a9ea6;--line:#2c2e33;
+  --accent:#748ffc;--accent-soft:#252b45;--ok:#69db7c;--err:#ff8787;--warn:#ffa94d;
+  --code:#25262a;--shadow:none;
+}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;display:flex}
+button{font:inherit;cursor:pointer}
+aside{width:340px;flex-shrink:0;border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;height:100vh}
+.brand{padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.brand h1{margin:0;font-size:18px;letter-spacing:-.01em}
+.brand h1 span{color:var(--accent)}
+.brand .status{font-size:12px;color:var(--muted);margin-top:4px}
+.drop{margin:14px 16px 8px;border:1.5px dashed var(--line);border-radius:10px;padding:16px;text-align:center;color:var(--muted);font-size:13px;transition:.15s}
+.drop.over{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.drop strong{color:var(--ink)}
+.drop button{background:none;border:none;color:var(--accent);padding:0;text-decoration:underline}
+.job{margin:0 16px 8px;font-size:12px;color:var(--muted)}
+.job .bar{height:4px;background:var(--line);border-radius:2px;margin-top:4px;overflow:hidden}
+.job .bar i{display:block;height:100%;background:var(--accent);transition:width .3s}
+.libhead{display:flex;justify-content:space-between;align-items:center;padding:8px 20px 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.libhead input{flex:1;margin-left:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:6px;padding:4px 8px;font-size:12px;text-transform:none}
+.scope{padding:0 20px 6px;font-size:12px;color:var(--muted)}
+.scope button{background:none;border:none;color:var(--accent);padding:0;font-size:12px}
+#docs{list-style:none;margin:0;padding:0 8px 16px;overflow-y:auto;flex:1}
+#docs li{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:8px}
+#docs li:hover{background:var(--bg)}
+#docs li input{margin-top:4px;accent-color:var(--accent)}
+#docs .t{font-size:13px;font-weight:500;line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+#docs .m{font-size:11.5px;color:var(--muted)}
+#docs .del{margin-left:auto;background:none;border:none;color:var(--muted);opacity:0;padding:2px 4px;font-size:14px}
+#docs li:hover .del{opacity:1}
+#docs .del:hover{color:var(--err)}
+.empty{padding:16px 20px;color:var(--muted);font-size:13px}
+main{flex:1;display:flex;flex-direction:column;height:100vh;min-width:0}
+#chat{flex:1;overflow-y:auto;padding:28px 0}
+.wrap{max-width:820px;margin:0 auto;padding:0 28px}
+.hero{text-align:center;margin-top:12vh;color:var(--muted)}
+.hero h2{color:var(--ink);font-size:26px;margin:0 0 8px;letter-spacing:-.02em}
+.sugg{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:20px}
+.sugg button{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:7px 14px;font-size:13px}
+.sugg button:hover{border-color:var(--accent)}
+.msg{margin:0 0 26px}
+.msg.user .bubble{background:var(--accent-soft);border-radius:12px;padding:10px 14px;display:inline-block;max-width:85%;white-space:pre-wrap}
+.msg.user{text-align:right}
+.msg.user .bubble{text-align:left}
+.answer p{margin:0 0 10px}
+.answer ul,.answer ol{margin:0 0 10px;padding-left:22px}
+.answer code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:13px}
+.answer pre{background:var(--code);padding:10px;border-radius:8px;overflow-x:auto}
+.cite{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 4px;margin:0 1px;border-radius:4px;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:600;vertical-align:2px;border:none;line-height:1}
+.cite:hover{background:var(--accent);color:#fff}
+.cursor::after{content:"▍";animation:blink 1s steps(1) infinite;color:var(--accent)}
+@keyframes blink{50%{opacity:0}}
+.searching{color:var(--muted);font-size:13px;font-style:italic}
+.sq{font-size:12px;color:var(--muted);margin-bottom:6px}
+.sources{margin-top:12px;display:grid;gap:8px}
+.sources h4{margin:4px 0 0;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.src{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:10px 12px;box-shadow:var(--shadow);transition:.2s}
+.src.uncited{opacity:.6}
+.src.flash{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.src .hd{display:flex;gap:8px;align-items:baseline}
+.src .n{font-weight:700;color:var(--accent);font-size:12px}
+.src .ttl{font-weight:600;font-size:13.5px;flex:1}
+.src .meta{font-size:12px;color:var(--muted);white-space:nowrap}
+.src .meta a{color:var(--accent);text-decoration:none}
+.src .snip{font-size:13px;color:var(--muted);margin-top:6px;white-space:pre-wrap;max-height:4.6em;overflow:hidden;cursor:pointer}
+.src .snip.open{max-height:none}
+.err{color:var(--err)}
+form{border-top:1px solid var(--line);background:var(--bg);padding:14px 0 18px}
+.inrow{display:flex;gap:10px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 8px 8px 14px;box-shadow:var(--shadow)}
+.inrow:focus-within{border-color:var(--accent)}
+textarea{flex:1;border:none;outline:none;resize:none;background:transparent;color:var(--ink);font:inherit;max-height:180px;padding:6px 0}
+#send{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:8px 16px;font-weight:600}
+#send:disabled{opacity:.5;cursor:default}
+.hint{font-size:11.5px;color:var(--muted);margin-top:6px;display:flex;justify-content:space-between}
+.hint button{background:none;border:none;color:var(--muted);padding:0;font-size:11.5px;text-decoration:underline}
+@media (max-width:820px){body{flex-direction:column}aside{width:100%;height:auto;max-height:42vh}main{height:auto;flex:1}.wrap{padding:0 16px}}
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand">
+    <h1>Research<span>Mind</span></h1>
+    <div class="status" id="status">Connecting…</div>
+  </div>
+  <div class="drop" id="drop">
+    <strong>Drop PDFs here</strong><br>or <button id="pick">browse files</button>
+    <input type="file" id="file" accept="application/pdf,.pdf" multiple hidden>
+  </div>
+  <div class="job" id="job" hidden></div>
+  <div class="libhead">Library <input id="filter" placeholder="Filter papers…"></div>
+  <div class="scope" id="scope"></div>
+  <ul id="docs"></ul>
+</aside>
+
+<main>
+  <div id="chat"><div class="wrap" id="thread">
+    <div class="hero" id="hero">
+      <h2>Ask your papers anything</h2>
+      <div>Answers are grounded in your library, with every claim cited back to the page.</div>
+      <div class="sugg" id="sugg"></div>
+    </div>
+  </div></div>
+  <form id="form"><div class="wrap">
+    <div class="inrow">
+      <textarea id="q" rows="1" placeholder="Ask a question about your papers…"></textarea>
+      <button id="send" type="submit">Ask</button>
+    </div>
+    <div class="hint"><span>Enter to send · Shift+Enter for newline</span><button type="button" id="clear">New chat</button></div>
+  </div></form>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let docs = [], selected = new Set(), history = [], busy = false;
+
+// ---------- status & library
+async function refreshStatus(){
+  try{
+    const h = await (await fetch('/api/health')).json();
+    $('#status').textContent = `${h.documents} papers · ${h.chunks} chunks · ${h.provider} / ${h.llm}`;
+  }catch{ $('#status').textContent = 'API unreachable'; }
+}
+async function refreshDocs(){
+  docs = await (await fetch('/api/documents')).json();
+  for (const id of [...selected]) if (!docs.find(d => d.doc_id === id)) selected.delete(id);
+  renderDocs(); refreshStatus(); renderSuggestions();
+}
+function renderDocs(){
+  const f = $('#filter').value.toLowerCase();
+  const list = docs.filter(d => !f || d.title.toLowerCase().includes(f) || d.file_name.toLowerCase().includes(f));
+  $('#docs').innerHTML = list.length ? list.map(d => `
+    <li title="${esc(d.file_name)}">
+      <input type="checkbox" data-id="${d.doc_id}" ${selected.has(d.doc_id)?'checked':''}>
+      <div style="min-width:0;flex:1">
+        <div class="t">${esc(d.title)}</div>
+        <div class="m">${d.pages} pages · ${d.chunks} chunks</div>
+      </div>
+      <button class="del" data-del="${d.doc_id}" title="Remove from library">✕</button>
+    </li>`).join('') : `<div class="empty">${docs.length ? 'No matches.' : 'No papers yet. Upload some PDFs to get started.'}</div>`;
+  $('#scope').innerHTML = selected.size
+    ? `Searching <b>${selected.size}</b> selected paper${selected.size>1?'s':''} · <button id="all">search all</button>`
+    : (docs.length ? 'Searching all papers · tick to narrow scope' : '');
+  const all = $('#all'); if (all) all.onclick = () => { selected.clear(); renderDocs(); };
+}
+$('#docs').addEventListener('change', e => {
+  const id = e.target.dataset.id; if (!id) return;
+  e.target.checked ? selected.add(id) : selected.delete(id); renderDocs();
+});
+$('#docs').addEventListener('click', async e => {
+  const id = e.target.dataset.del; if (!id) return;
+  const d = docs.find(x => x.doc_id === id);
+  if (!confirm(`Remove "${d.title}" from the library?`)) return;
+  await fetch(`/api/documents/${id}`, {method:'DELETE'}); refreshDocs();
+});
+$('#filter').oninput = renderDocs;
+
+// ---------- upload
+const drop = $('#drop');
+$('#pick').onclick = () => $('#file').click();
+$('#file').onchange = e => upload([...e.target.files]);
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => {e.preventDefault(); drop.classList.add('over');}));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, e => {e.preventDefault(); drop.classList.remove('over');}));
+drop.addEventListener('drop', e => upload([...e.dataTransfer.files]));
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => { if (!drop.contains(e.target)) { e.preventDefault(); upload([...e.dataTransfer.files]); }});
+
+async function upload(files){
+  files = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (!files.length) return;
+  const job = $('#job'); job.hidden = false;
+  job.innerHTML = `Uploading ${files.length} file${files.length>1?'s':''}…`;
+  const fd = new FormData(); files.forEach(f => fd.append('files', f));
+  const r = await fetch('/api/documents/upload', {method:'POST', body:fd});
+  const j = await r.json();
+  if (!r.ok){ job.innerHTML = `<span class="err">${esc(j.detail?.message || 'Upload failed')}</span>`; return; }
+  pollJob(j.job_id, j.rejected || []);
+}
+async function pollJob(id, rejected){
+  const job = $('#job');
+  const j = await (await fetch(`/api/jobs/${id}`)).json();
+  const pct = j.total ? Math.round(100*j.done/j.total) : 0;
+  const errs = [...rejected, ...j.results.filter(r => r.status === 'error')];
+  const skipped = j.results.filter(r => r.status === 'skipped').length;
+  if (j.status === 'completed'){
+    const ok = j.results.filter(r => r.status === 'ingested').length;
+    job.innerHTML = `✓ Indexed ${ok} paper${ok!==1?'s':''}${skipped?` · ${skipped} already in library`:''}` +
+      errs.map(e => `<div class="err">✕ ${esc(e.file_name)}: ${esc(e.error)}</div>`).join('');
+    refreshDocs(); setTimeout(() => { if (!errs.length) job.hidden = true; }, 6000);
+    return;
+  }
+  job.innerHTML = `Embedding ${j.done}/${j.total}${j.current?` · ${esc(j.current)}`:''}<div class="bar"><i style="width:${pct}%"></i></div>`;
+  if (j.done) refreshDocs();
+  setTimeout(() => pollJob(id, rejected), 1200);
+}
+
+// ---------- tiny, safe markdown (escape first, then format)
+function md(src){
+  const blocks = esc(src).split(/\n{2,}/);
+  return blocks.map(b => {
+    if (/^```/.test(b)) return `<pre><code>${b.replace(/^```\w*\n?|```$/g,'')}</code></pre>`;
+    const lines = b.split('\n');
+    if (lines.every(l => /^\s*([-*•]|\d+\.)\s+/.test(l) || !l.trim())){
+      const ordered = /^\s*\d+\./.test(lines[0]);
+      return `<${ordered?'ol':'ul'}>${lines.filter(l=>l.trim()).map(l => `<li>${inline(l.replace(/^\s*([-*•]|\d+\.)\s+/,''))}</li>`).join('')}</${ordered?'ol':'ul'}>`;
+    }
+    // mixed paragraph + list lines
+    return lines.map(l => /^\s*([-*•]|\d+\.)\s+/.test(l)
+      ? `<ul><li>${inline(l.replace(/^\s*([-*•]|\d+\.)\s+/,''))}</li></ul>`
+      : (/^#{1,4}\s/.test(l) ? `<p><strong>${inline(l.replace(/^#+\s/,''))}</strong></p>` : `<p>${inline(l)}</p>`)).join('');
+  }).join('');
+}
+function inline(s){
+  return s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+          .replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<em>$2</em>')
+          .replace(/`([^`]+)`/g,'<code>$1</code>')
+          .replace(/\[(\d+)\]/g,'<button class="cite" data-n="$1">$1</button>');
+}
+
+// ---------- chat
+function addMsg(role, html){
+  $('#hero')?.remove();
+  const el = document.createElement('div'); el.className = `msg ${role}`; el.innerHTML = html;
+  $('#thread').appendChild(el); scrollDown(); return el;
+}
+function scrollDown(){ const c = $('#chat'); c.scrollTop = c.scrollHeight; }
+
+function renderSources(el, sources, cited){
+  if (!sources.length) return;
+  const c = new Set(cited);
+  el.innerHTML = `<h4>Sources</h4>` + sources.map(s => `
+    <div class="src ${cited && !c.has(s.id) ? 'uncited':''}" data-n="${s.id}">
+      <div class="hd"><span class="n">[${s.id}]</span><span class="ttl">${esc(s.title)}</span>
+        <span class="meta">p.${s.page} · ${(s.score*100).toFixed(0)}% · <a href="/api/documents/${s.doc_id}/pdf#page=${s.page}" target="_blank">open ↗</a></span></div>
+      <div class="snip" title="Click to expand">${esc(s.text)}</div>
+    </div>`).join('');
+}
+
+$('#thread').addEventListener('click', e => {
+  if (e.target.classList.contains('snip')) { e.target.classList.toggle('open'); return; }
+  const n = e.target.dataset?.n; if (!e.target.classList.contains('cite')) return;
+  const card = e.target.closest('.msg').querySelector(`.src[data-n="${n}"]`); if (!card) return;
+  card.scrollIntoView({behavior:'smooth', block:'center'});
+  card.classList.add('flash'); setTimeout(() => card.classList.remove('flash'), 1400);
+});
+
+async function ask(question){
+  if (busy || !question.trim()) return;
+  busy = true; $('#send').disabled = true;
+  addMsg('user', `<div class="bubble">${esc(question)}</div>`);
+  const el = addMsg('assistant', `<div class="sq"></div><div class="answer cursor"><span class="searching">Searching ${selected.size || 'all'} paper${selected.size===1?'':'s'}…</span></div><div class="sources"></div>`);
+  const ans = el.querySelector('.answer'), srcEl = el.querySelector('.sources');
+  let text = '', sources = [];
+  try{
+    const r = await fetch('/api/query/stream', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({question, doc_ids: selected.size ? [...selected] : null, history})});
+    if (!r.ok) throw new Error((await r.json()).detail?.[0]?.msg || r.statusText);
+    const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '';
+    while (true){
+      const {value, done} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream:true});
+      let i; while ((i = buf.indexOf('\n\n')) >= 0){
+        const line = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (!line.startsWith('data: ')) continue;
+        const ev = JSON.parse(line.slice(6));
+        if (ev.type === 'sources'){
+          sources = ev.sources; renderSources(srcEl, sources, null);
+          if (history.length && ev.search_query !== question) el.querySelector('.sq').textContent = `Searched for: “${ev.search_query}”`;
+          ans.innerHTML = '<span class="searching">Reading sources…</span>';
+        } else if (ev.type === 'token'){
+          text += ev.text; ans.innerHTML = md(text); scrollDown();
+        } else if (ev.type === 'done'){
+          renderSources(srcEl, sources, ev.cited);
+        } else if (ev.type === 'error'){ throw new Error(ev.message); }
+      }
+    }
+    history.push({role:'user', content:question}, {role:'assistant', content:text});
+    history = history.slice(-8);
+  }catch(err){
+    ans.innerHTML = (text ? md(text) : '') + `<p class="err">Error: ${esc(err.message)}</p>`;
+  }finally{
+    ans.classList.remove('cursor'); busy = false; $('#send').disabled = false; $('#q').focus(); scrollDown();
+  }
+}
+
+const q = $('#q');
+q.addEventListener('input', () => { q.style.height = 'auto'; q.style.height = q.scrollHeight + 'px'; });
+q.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); $('#form').requestSubmit(); }});
+$('#form').onsubmit = e => { e.preventDefault(); const v = q.value; q.value = ''; q.style.height = 'auto'; ask(v); };
+$('#clear').onclick = () => { history = []; $('#thread').innerHTML = `<div class="hero" id="hero"><h2>Ask your papers anything</h2><div>Answers are grounded in your library, with every claim cited back to the page.</div><div class="sugg" id="sugg"></div></div>`; renderSuggestions(); };
+
+function renderSuggestions(){
+  const s = $('#sugg'); if (!s) return;
+  const qs = docs.length ? ['Summarize the key contributions across these papers','What datasets and benchmarks are used?','Compare the methods and their limitations','What open problems or future work do the authors mention?'] : [];
+  s.innerHTML = qs.map(x => `<button type="button">${x}</button>`).join('');
+  s.querySelectorAll('button').forEach(b => b.onclick = () => ask(b.textContent));
+}
+
+refreshDocs(); setInterval(refreshStatus, 15000); q.focus();
+</script>
+</body>
+</html>
