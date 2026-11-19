@@ -1,6 +1,7 @@
 """ResearchMind API."""
 from __future__ import annotations
 
+import json
 import logging
 import re
 import threading
@@ -9,11 +10,15 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ingest
+from . import ingest, rag
 from .config import ROOT, get_settings
+from .providers import get_chroma_collection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("researchmind")
@@ -91,10 +96,6 @@ def _safe_name(name: str) -> str:
     name = Path(name).name
     stem = re.sub(r"[^\w.\- ]+", "_", Path(name).stem).strip() or "paper"
     return f"{stem[:120]}.pdf"
-
-from fastapi import File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
-from .providers import get_chroma_collection
 
 
 # ---------------------------------------------------------------- routes
@@ -182,3 +183,42 @@ def get_pdf(doc_id: str):
         raise HTTPException(404, "PDF file no longer on disk")
     return FileResponse(path, media_type="application/pdf",
                         headers={"Content-Disposition": f'inline; filename="{entry["file_name"]}"'})
+
+
+@app.post("/api/query")
+def query(req: QueryRequest):
+    return rag.answer(req.question, req.top_k, req.doc_ids, [t.model_dump() for t in req.history])
+
+
+@app.post("/api/query/stream")
+async def query_stream(req: QueryRequest, request: Request):
+    history = [t.model_dump() for t in req.history]
+    cancel = threading.Event()
+    end = object()
+
+    async def events():
+        gen = rag.answer_stream(req.question, req.top_k, req.doc_ids, history, cancel=cancel)
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                ev = await run_in_threadpool(next, gen, end)  # LLM calls block; keep them off the event loop
+                if ev is end:
+                    break
+                yield f"data: {json.dumps(ev)}\n\n"
+        except Exception as e:  # noqa: BLE001
+            log.exception("Query failed")
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            # Runs on normal end, error, *and* client disconnect (task cancellation).
+            cancel.set()
+            try:
+                gen.close()  # paused generator -> its finally closes the HTTP stream to the LLM now
+            except ValueError:
+                pass  # a worker thread is mid-token; it sees `cancel` at the next token and stops itself
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+app.mount("/", StaticFiles(directory=ROOT / "static", html=True), name="static")
