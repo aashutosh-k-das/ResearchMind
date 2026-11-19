@@ -128,3 +128,59 @@ def extract_pdf(path: Path) -> tuple[str, list[tuple[int, str]]]:
         raise IngestError("No extractable text (scanned PDF? run OCR first)")
     title = guess_title(reader, pages[0][1], fallback=path.stem.replace("_", " "))
     return title, pages
+
+import hashlib
+import time
+from llama_index.core import Document
+from llama_index.core.node_parser import SentenceSplitter
+from .providers import get_index
+
+
+def file_hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def ingest_pdf(path: Path, original_name: str | None = None) -> dict:
+    """Ingest a single PDF. Idempotent: identical file content is skipped."""
+    s = get_settings()
+    data = path.read_bytes()
+    doc_id = file_hash(data)
+    name = original_name or path.name
+
+    reg = load_registry()
+    if doc_id in reg:
+        return {"doc_id": doc_id, "status": "skipped", "reason": "already ingested", **reg[doc_id]}
+
+    t0 = time.perf_counter()
+    title, pages = extract_pdf(path)
+
+    documents = []
+    for page_no, text in pages:
+        doc = Document(
+            text=text,
+            metadata={"paper_id": doc_id, "file_name": name, "title": title, "page": page_no},
+            excluded_embed_metadata_keys=["paper_id", "file_name", "page"],
+            excluded_llm_metadata_keys=["paper_id"],
+        )
+        documents.append(doc)
+
+    splitter = SentenceSplitter(chunk_size=s.chunk_size, chunk_overlap=s.chunk_overlap)
+    nodes = splitter.get_nodes_from_documents(documents)
+    for n in nodes:
+        n.excluded_embed_metadata_keys = ["paper_id", "file_name", "page"]
+
+    get_index().insert_nodes(nodes)
+
+    entry = {
+        "file_name": name,
+        "title": title,
+        "pages": len(pages),
+        "chunks": len(nodes),
+        "ingested_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    with _registry_lock:
+        reg = load_registry()
+        reg[doc_id] = entry
+        _save_registry(reg)
+    log.info("Ingested %s (%d chunks) in %.1fs", name, len(nodes), time.perf_counter() - t0)
+    return {"doc_id": doc_id, "status": "ingested", "seconds": round(time.perf_counter() - t0, 1), **entry}
