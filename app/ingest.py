@@ -38,3 +38,93 @@ def _save_registry(reg: dict) -> None:
 def list_documents() -> list[dict]:
     reg = load_registry()
     return sorted(({"doc_id": k, **v} for k, v in reg.items()), key=lambda d: d["title"].lower())
+
+import math
+import re
+from pypdf import PdfReader
+
+
+def clean_text(text: str) -> str:
+    text = text.replace("\x00", "")
+    text = re.sub(r"(\w)-\n(\w)", r"\1\2", text)  # de-hyphenate line breaks
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _title_from_font_size(page) -> str:
+    """Papers set the title in the largest font on page 1. Collect that run of text."""
+    segs: list[tuple[float, float, str]] = []
+    top_half = float(page.mediabox.height) * 0.5
+
+    def visitor(text, cm, tm, font_dict, font_size):
+        if not text.strip() or re.match(r"\s*arXiv:", text):
+            return
+        y = cm[5] + tm[5] * cm[3]
+        if y < top_half:  # titles live at the top; ignore big labels inside figures further down
+            return
+        size = font_size * math.hypot(tm[2], tm[3]) * math.hypot(cm[2], cm[3])
+        segs.append((size, y, text))
+
+    page.extract_text(visitor_text=visitor)
+    if not segs:
+        return ""
+    biggest = max(s for s, _, _ in segs)
+    start = next(i for i, (s, _, _) in enumerate(segs) if s >= biggest - 0.1)
+    parts: list[str] = []
+    prev_size = prev_y = None
+    for size, y, text in segs[start:]:
+        if size < biggest * 0.75:  # small caps are ~80% of cap height; body/author text is far smaller
+            break
+        if prev_size is not None and size < prev_size - 0.5:
+            text = text.lstrip()  # small-caps tail after a big capital ("L" + " OW") -> "LOW"
+        if prev_y is not None and y < prev_y - 1 and parts and parts[-1].endswith("-"):
+            parts[-1] = parts[-1][:-1]  # word hyphenated across a line break
+            text = text.lstrip()
+        parts.append(text)
+        prev_size, prev_y = size, y
+    title = re.sub(r"\s+", " ", "".join(parts)).strip()
+    return title if 8 <= len(title) <= 250 else ""
+
+
+def guess_title(reader: PdfReader, first_page: str, fallback: str) -> str:
+    try:
+        if t := _title_from_font_size(reader.pages[0]):
+            return t
+    except Exception:  # noqa: BLE001
+        pass
+    meta_title = (reader.metadata.title if reader.metadata else None) or ""
+    meta_title = meta_title.strip()
+    if 8 <= len(meta_title) <= 250 and not meta_title.lower().endswith((".pdf", ".dvi", ".tex")) \
+            and "untitled" not in meta_title.lower() and "microsoft word" not in meta_title.lower():
+        return meta_title
+    # Heuristic: first reasonably long line of page 1 that isn't an arXiv stamp / header
+    for line in first_page.splitlines()[:15]:
+        line = line.strip()
+        if 15 <= len(line) <= 200 and not re.match(r"^(arxiv|preprint|published|proceedings|\d)", line, re.I):
+            return line
+    return fallback
+
+
+def extract_pdf(path: Path) -> tuple[str, list[tuple[int, str]]]:
+    try:
+        reader = PdfReader(str(path))
+    except Exception as e:  # noqa: BLE001
+        raise IngestError(f"Could not open PDF: {e}") from e
+    if reader.is_encrypted:
+        try:
+            reader.decrypt("")
+        except Exception as e:  # noqa: BLE001
+            raise IngestError("PDF is encrypted") from e
+    pages: list[tuple[int, str]] = []
+    for i, page in enumerate(reader.pages, start=1):
+        try:
+            txt = clean_text(page.extract_text() or "")
+        except Exception:  # noqa: BLE001 - a single bad page shouldn't sink the paper
+            txt = ""
+        if len(txt) > 30:
+            pages.append((i, txt))
+    if not pages:
+        raise IngestError("No extractable text (scanned PDF? run OCR first)")
+    title = guess_title(reader, pages[0][1], fallback=path.stem.replace("_", " "))
+    return title, pages
