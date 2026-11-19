@@ -1,0 +1,18 @@
+services:
+  api:
+    build: .
+    ports: ["8010:8000"]
+    env_file: [.env]
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - ./data:/app/data
+      - ./storage:/app/storage
+    depends_on: [ollama]
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+    # First run: docker compose exec ollama ollama pull llama3.2:3b && docker compose exec ollama ollama pull nomic-embed-text
+volumes:
+  ollama:
